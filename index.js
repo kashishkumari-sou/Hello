@@ -6,7 +6,7 @@ const path = require("path");
 const cors = require("cors");
 const express = require("express");
 const mime = require("mime-types");
-
+//heloo
 const app = express();
 app.use(cors({ origin: "*" }));
 app.use("/trans", express.static("trans"));
