@@ -6,7 +6,7 @@ const path = require("path");
 const cors = require("cors");
 const express = require("express");
 const mime = require("mime-types");
-//heloo
+
 const app = express();
 app.use(cors({ origin: "*" }));
 app.use("/trans", express.static("trans"));
@@ -20,24 +20,25 @@ const RES = [
   { name: "144p", width: 256, height: 144 },
   { name: "240p", width: 426, height: 240 },
   { name: "360p", width: 640, height: 360 },
-  { name: "480p", width: 854, height: 480 },
-  { name: "720p", width: 1280, height: 720 },
-  { name: "1080p", width: 1920, height: 1080 },
+  { name: "480p", width: 640, height: 360 },
+  { name: "720p", width: 640, height: 360 }
 ];
 
+const a = "";
+const b = "";
 const s3 = new S3Client({
   region: "ap-south-1",
   credentials: {
-    accessKeyId: "AKIAXQIP76MSZRZ6B6PS",
-    secretAccessKey: "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",
+    accessKeyId: a,
+    secretAccessKey: b,
   },
 });
 
 const client = new SQSClient({
   region: "ap-south-1",
   credentials: {
-    accessKeyId: "AKIAXQIP76MSZRZ6B6PS",
-    secretAccessKey: "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",
+    accessKeyId: a,
+    secretAccessKey: b,
   },
 });
 
@@ -86,7 +87,7 @@ async function init() {
 }
 
 async function deleteMessage(receiptHandle) {
-  /*const deleteCmd = new DeleteMessageCommand({
+  const deleteCmd = new DeleteMessageCommand({
     QueueUrl: "https://sqs.ap-south-1.amazonaws.com/515966497573/myfirstq",
     ReceiptHandle: receiptHandle,
   });
@@ -96,7 +97,7 @@ async function deleteMessage(receiptHandle) {
     console.log("Message deleted successfully.");
   } catch (error) {
     console.error("Error deleting message:", error);
-  }*/
+  }
 }
 
 async function processVideo(bucket, key, videoId) {
@@ -116,8 +117,12 @@ async function processVideo(bucket, key, videoId) {
     result.Body.pipe(writeStream);
 
     writeStream.on("finish", async () => {
-      await transcode(videoPath, videoDir, videoId);
-      fs.unlinkSync(videoPath);
+      try {
+        await transcode(videoPath, videoDir, videoId);
+        fs.unlinkSync(videoPath);
+      } catch (error) {
+        console.error("Error during video processing:", error);
+      }
     });
   } catch (error) {
     console.error(`Error downloading file ${key}:`, error);
@@ -152,21 +157,14 @@ async function transcode(inputFile, outputDir, videoId) {
           reject(error);
         } else {
           try {
-            await uploadToS3(`${videoId}/${name}/index.m3u8`, outputFile);
-            let files;
-            try {
-              files = await fs.promises.readdir(resolutionDir);
-            } catch (error) {
-              reject(error);
-              return;
-            }
-              const uploadPromises = files
-                .filter((file) => file.endsWith(".ts"))
-                .map((file) => uploadToS3(`${videoId}/${name}/${file}`, path.join(resolutionDir, file)));
-              await Promise.all(uploadPromises);
-resolve()
-            }
-          catch (uploadError) {
+            await uploadToS3(`transcoded/${videoId}/${name}/index.m3u8`, outputFile);
+            const files = await fs.promises.readdir(resolutionDir);
+            const uploadPromises = files
+              .filter((file) => file.endsWith(".ts"))
+              .map((file) => uploadToS3(`transcoded/${videoId}/${name}/${file}`, path.join(resolutionDir, file)));
+            await Promise.all(uploadPromises);
+            resolve();
+          } catch (uploadError) {
             reject(uploadError);
           }
         }
@@ -194,7 +192,10 @@ async function generateIndexFile(outputDir, videoId) {
   fs.writeFileSync(indexPath, `#EXTM3U\n${indexContent}`);
   console.log("Master playlist created:", indexPath);
 
-  await uploadToS3(`${videoId}/index.m3u8`, indexPath);
+  await uploadToS3(`transcoded/${videoId}/index.m3u8`, indexPath);
+  await fs.promises.rmdir(outputDir, {
+    recursive: true
+  })
   console.log("Master playlist uploaded to S3.");
 }
 
@@ -219,3 +220,4 @@ init();
 app.listen(3000, () => {
   console.log("Server running on port 3000");
 });
+  
